@@ -1,0 +1,80 @@
+services:
+  slave:
+    image: sa_slave
+    build:
+      context: slave
+      dockerfile: Dockerfile
+    volumes:
+      - './slave:/app'
+    networks:
+      - network
+    environment:
+      DB_HOST: db
+      DB_USER: root
+      DB_PASSWORD: root
+      DB_NAME: mydb
+      DB_PORT: 3306
+      GITHUB_API_KEY: "${GITHUB_API_KEY}"
+      SOCKS_PROXY: socks5h://tor:9050,socks5h://tor1:9050,socks5h://tor2:9050
+  db:
+    image: mysql/mysql-server:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_HOST: "%"
+      MYSQL_DATABASE: mydb
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root
+    volumes:
+      - mysql:/var/lib/mysql
+    networks:
+      - network
+  tor1:
+    volumes:
+      - ./docker/tor:/etc/tor
+    build:
+      context: ./docker/tor
+      dockerfile: Dockerfile
+    networks:
+      - network
+
+  tor2:
+    volumes:
+      - ./docker/tor:/etc/tor
+    build:
+      context: ./docker/tor
+      dockerfile: Dockerfile
+    networks:
+      - network
+
+  tor3:
+    volumes:
+      - ./docker/tor:/etc/tor
+    build:
+      context: ./docker/tor
+      dockerfile: Dockerfile
+    networks:
+      - network
+  tor4:
+    volumes:
+      - ./docker/tor:/etc/tor
+    build:
+      context: ./docker/tor
+      dockerfile: Dockerfile
+    networks:
+      - network
+  tor5:
+    volumes:
+      - ./docker/tor:/etc/tor
+    build:
+      context: ./docker/tor
+      dockerfile: Dockerfile
+    networks:
+      - network
+
+volumes:
+  mysql:
+    driver: local
+
+networks:
+  network:
+    driver: bridge
