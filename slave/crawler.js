@@ -3,8 +3,8 @@ const Logger = require('./logger');
 const fetch = require('node-fetch')
 const TorController = require('./tor')
 
-const TOR = 'TOR'
 const API_KEY = 'API_KEY'
+const TOR = 'TOR'
 
 class Crawler {
     constructor(DATABASE) {
@@ -14,38 +14,28 @@ class Crawler {
         this.commits = []
         this.tokens = process.env.GITHUB_API_KEY.split(',')
         this.currentToken = 0
-        this.tors = [
-            new TorController("tor1", 9051, "pmquy", 'socks5h://tor1:9050'),
-            new TorController("tor2", 9051, "pmquy", 'socks5h://tor2:9050'),
-            new TorController("tor3", 9051, "pmquy", 'socks5h://tor3:9050'),
-            new TorController("tor4", 9051, "pmquy", 'socks5h://tor4:9050'),
-            new TorController("tor5", 9051, "pmquy", 'socks5h://tor5:9050'),
-        ]
-        this.option = API_KEY
+        this.tors = process.env.TORS_LIST.split(',').map(tor => new TorController(tor))
         this.currentTor = 0
+        this.option = API_KEY
     }
 
-    async start() {
+    async init() {
         const { default: PQueue } = await import("p-queue")
-        this.queue = new PQueue({
-            concurrency: 60,
-        })
+        this.queue = new PQueue({ concurrency: 60, })
         this.queue.start()
         await Promise.all(this.tors.map(tor => tor.connect()))
-        await this.clear()
-        await this.getRepos(1)
     }
 
-    async fetchWithRetry(url, options, retries = 50) {
+    async fetchWithRetry(url, options, retries = 20) {
         this.currentTor = (this.currentTor + 1) % this.tors.length
         const Tor = this.tors[this.currentTor]
         try {
             const response = await fetch(url, {
                 method: 'GET',
-                agent: Tor.agent,
-                // headers: {
-                //     'Authorization': this.currentToken != -1 ? `Bearer ${this.tokens[this.currentToken]}` : undefined,
-                // }
+                agent: this.option === TOR ? Tor.agent : undefined,
+                headers: {
+                    'Authorization': this.option === API_KEY ? `Bearer ${this.tokens[this.currentToken]}` : undefined,
+                }
             });
             if (!response.ok) {
                 throw {
@@ -57,15 +47,22 @@ class Crawler {
             return response
         } catch (error) {
             if (error.status === 404 || retries === 0) {
-                Logger.error(`URL: ${error.url} - Status: ${error.status} - Message: ${error.message}`);
                 throw error;
             }
             if (error.status === 403 || error.status === 429) {
-            
+                if (this.option === TOR) {
+                    await Tor.rotateIP()
+                }
+                if (this.option === API_KEY) {
+                    if (this.currentToken === this.tokens.length - 1) {
+                        this.option = TOR
+                    } else {
+                        this.currentToken++
+                    }
+                }
             }
+            await sleep(200 * (20 - retries))
             console.log(`Error: ${error.message} - Status: ${error.status} - URL: ${error.url} - Retrying... (${retries})`);
-            await Tor.rotateIP()
-            await sleep(1000)
             return this.fetchWithRetry(url, options, retries - 1)
         }
     }
@@ -99,15 +96,13 @@ class Crawler {
             const response = await this.fetchWithQueue(`https://api.github.com/repos/${repo.full_name}/releases?page=1&per_page=1`)
             const total = getLastPage(response.headers.get('link'))
             const release = await Promise.all(new Array(Math.min(Math.ceil(total / 100), 10)).fill(0).map((_, i) => this.getReleases.call(this, repo, i + 1)));
-            return {
-                releases: release.flatMap(r => r.releases),
-                commits: release.flatMap(r => r.commits)
-            }
+            Logger.info(`Repo: ${repo.full_name} - Releases: ${release.flatMap(r => r.releases).length} - Commits: ${release.flatMap(r => r.commits).length}`);
+            this.releases.push(...release.flatMap(r => r.releases))
+            this.commits.push(...release.flatMap(r => r.commits))
+            this.repos.push([repo.id, repo.owner, repo.name])
         } catch (error) {
-            return {
-                releases: [],
-                commits: []
-            }
+            Logger.error(`Error fetching repo ${repo.full_name}: ${error.message}`);
+            throw error
         }
     }
 
@@ -120,63 +115,14 @@ class Crawler {
         }
     }
 
-    async getRepos(page) {
-        try {
-            const repos = await this.fetchWithQueue(`https://api.github.com/search/repositories?q=stars:>5000&sort=stars&order=desc&per_page=100&page=1`).then(res => res.json()).then(res => res.items)
-            const res = []
-            for (const repo of repos) {
-                const t = await this.fetchRepo.call(this, repo)
-                Logger.info(`Fetching repo: ${repo.full_name} - Releases: ${t.releases.length} - Commits: ${t.commits.length}`);
-                res.push(t)
-            }
-            this.repos = repos.map(repo => [repo.id, repo.owner.login, repo.name])
-            this.releases = res.flatMap(r => r.releases)
-            this.commits = res.flatMap(r => r.commits)
-        } catch (error) {
-        } finally {
-            console.log(this.repos.length, this.releases.length, this.commits.length)
-        }
-    }
-
     async save() {
-        await this.DATABASE.query(`INSERT INTO repos (id, user, name) VALUES ?`, [this.repos])
-        await this.DATABASE.query(`INSERT INTO releases (id, content, repoID) VALUES ?`, [this.releases])
-        await this.DATABASE.query(`INSERT INTO commits (hash, message, releaseID) VALUES ?`, [this.commits])
-    }
-
-    async clear() {
-        await this.DATABASE.query(`
-            DROP TABLE IF EXISTS commits;
-            
-            DROP TABLE IF EXISTS releases;
-
-            DROP TABLE IF EXISTS repos;
-
-            CREATE TABLE IF NOT EXISTS releases (
-                id int NOT NULL UNIQUE,
-                content longtext NOT NULL,
-                repoID int NOT NULL,
-                PRIMARY KEY (id)
-            );
-
-            CREATE TABLE IF NOT EXISTS repos (
-                id int NOT NULL UNIQUE,
-                user text NOT NULL,
-                name text NOT NULL,
-                PRIMARY KEY (id)
-            );
-
-            CREATE TABLE IF NOT EXISTS commits (
-                hash text NOT NULL,
-                message text NOT NULL,
-                releaseID int NOT NULL
-            );
-
-
-            ALTER TABLE releases ADD CONSTRAINT repo_fk0 FOREIGN KEY (repoID) REFERENCES repos(id);
-
-            ALTER TABLE commits ADD CONSTRAINT commit_fk2 FOREIGN KEY (releaseID) REFERENCES releases(id);
-        `)
+        console.log('Saving data...')
+        console.log('Repos:', this.repos.length)
+        console.log('Releases:', this.releases.length)
+        console.log('Commits:', this.commits.length)
+        // await this.DATABASE.query(`INSERT INTO repos (id, user, name) VALUES ?`, [this.repos])
+        // await this.DATABASE.query(`INSERT INTO releases (id, content, repoID) VALUES ?`, [this.releases])
+        // await this.DATABASE.query(`INSERT INTO commits (hash, message, releaseID) VALUES ?`, [this.commits])
     }
 }
 

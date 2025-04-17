@@ -1,5 +1,25 @@
 services:
-  slave:
+  master:
+    image: sa_master
+    build:
+      context: master
+      dockerfile: Dockerfile
+    volumes:
+      - './master:/app'
+    networks:
+      - network
+    environment:
+      REDIS_URL: "redis://redis:6379"
+      GITHUB_API_KEY: "${GITHUB_API_KEY}"
+      DB_HOST: db
+      DB_USER: root
+      DB_PASSWORD: root
+      DB_NAME: mydb
+      DB_PORT: 3306
+    depends_on:
+      - redis
+      - db
+  slave1:
     image: sa_slave
     build:
       context: slave
@@ -15,7 +35,62 @@ services:
       DB_NAME: mydb
       DB_PORT: 3306
       GITHUB_API_KEY: "${GITHUB_API_KEY}"
-      SOCKS_PROXY: socks5h://tor:9050,socks5h://tor1:9050,socks5h://tor2:9050
+      REDIS_URL: "redis://redis:6379"
+      TORS_LIST: "tor11,tor12,tor13"
+    depends_on:
+      - db
+      - redis
+      - tor11
+      - tor12
+      - tor13
+  slave2:
+    image: sa_slave
+    build:
+      context: slave
+      dockerfile: Dockerfile
+    volumes:
+      - './slave:/app'
+    networks:
+      - network
+    environment:
+      DB_HOST: db
+      DB_USER: root
+      DB_PASSWORD: root
+      DB_NAME: mydb
+      DB_PORT: 3306
+      GITHUB_API_KEY: "${GITHUB_API_KEY}"
+      REDIS_URL: "redis://redis:6379"
+      TORS_LIST: "tor21,tor22,tor23"
+    depends_on:
+      - db
+      - redis
+      - tor21
+      - tor22
+      - tor23
+  slave3:
+    image: sa_slave
+    build:
+      context: slave
+      dockerfile: Dockerfile
+    volumes:
+      - './slave:/app'
+    networks:
+      - network
+    environment:
+      DB_HOST: db
+      DB_USER: root
+      DB_PASSWORD: root
+      DB_NAME: mydb
+      DB_PORT: 3306
+      GITHUB_API_KEY: "${GITHUB_API_KEY}"
+      REDIS_URL: "redis://redis:6379"
+      TORS_LIST: "tor31,tor32,tor33"
+    depends_on:
+      - db
+      - redis
+      - tor31
+      - tor32
+      - tor33
   db:
     image: mysql/mysql-server:8.0
     environment:
@@ -28,7 +103,7 @@ services:
       - mysql:/var/lib/mysql
     networks:
       - network
-  tor1:
+  tor11:
     volumes:
       - ./docker/tor:/etc/tor
     build:
@@ -37,7 +112,7 @@ services:
     networks:
       - network
 
-  tor2:
+  tor12:
     volumes:
       - ./docker/tor:/etc/tor
     build:
@@ -46,7 +121,7 @@ services:
     networks:
       - network
 
-  tor3:
+  tor13:
     volumes:
       - ./docker/tor:/etc/tor
     build:
@@ -54,7 +129,7 @@ services:
       dockerfile: Dockerfile
     networks:
       - network
-  tor4:
+  tor21:
     volumes:
       - ./docker/tor:/etc/tor
     build:
@@ -62,7 +137,44 @@ services:
       dockerfile: Dockerfile
     networks:
       - network
-  tor5:
+  tor22:
+    volumes:
+      - ./docker/tor:/etc/tor
+    build:
+      context: ./docker/tor
+      dockerfile: Dockerfile
+    networks:
+      - network
+  tor23:
+    volumes:
+      - ./docker/tor:/etc/tor
+    build:
+      context: ./docker/tor
+      dockerfile: Dockerfile
+    networks:
+      - network
+  redis:
+    image: redis:alpine
+    networks:
+      - network
+
+  tor31:
+    volumes:
+      - ./docker/tor:/etc/tor
+    build:
+      context: ./docker/tor
+      dockerfile: Dockerfile
+    networks:
+      - network
+  tor32:
+    volumes:
+      - ./docker/tor:/etc/tor
+    build:
+      context: ./docker/tor
+      dockerfile: Dockerfile
+    networks:
+      - network
+  tor33:
     volumes:
       - ./docker/tor:/etc/tor
     build:

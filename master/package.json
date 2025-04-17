@@ -1,5 +1,5 @@
 {
-  "name": "slave",
+  "name": "master",
   "version": "1.0.0",
   "description": "",
   "license": "ISC",
@@ -10,16 +10,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node main.js"
   },
-  "devDependencies": {
-    "dotenv": "^16.4.7"
-  },
   "dependencies": {
     "mysql2": "^3.14.0",
-    "node-fetch": "^2.7.0",
-    "p-queue": "^8.1.0",
-    "redis": "^4.7.0",
-    "socks-proxy-agent": "^8.0.5",
-    "tor-control": "^0.0.3",
-    "winston": "^3.17.0"
+    "redis": "^4.7.0"
   }
 }

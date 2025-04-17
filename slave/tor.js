@@ -3,7 +3,7 @@ const { debounce } = require('./utils');
 const { SocksProxyAgent } = require('socks-proxy-agent');
 
 class TorController {
-    constructor(host, port, password, socks_proxy) {
+    constructor(host, port = 9051, password = 'pmquy') {
         this.host = host;
         this.port = port;
         this.password = password;
@@ -12,7 +12,7 @@ class TorController {
         this.commandQueue = [];
         this.isReady = false;
         this.rotateIP = debounce(this.sendCommand.bind(this, 'SIGNAL NEWNYM'), 10000)
-        this.agent = new SocksProxyAgent(socks_proxy);
+        this.agent = new SocksProxyAgent(`socks5h://${host}:9050`);
     }
 
     connect() {
