@@ -8,38 +8,38 @@ services:
       - './master:/app'
     networks:
       - network
+    ports:
+      - "3000:3000"
     environment:
-      REDIS_URL: "redis://redis:6379"
-      GITHUB_API_KEY: "${GITHUB_API_KEY}"
-      DB_HOST: db
-      DB_USER: root
-      DB_PASSWORD: root
-      DB_NAME: mydb
-      DB_PORT: 3306
-    depends_on:
-      - redis
-      - db
+      REDIS_URL: "${REDIS_URL}"
+      DB_HOST: "${DB_HOST}"
+      DB_USER: "${DB_USER}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      DB_NAME: "${DB_NAME}"
+      DB_PORT: "${DB_PORT}"
+      GITHUB_API_KEY: "${API_KEY_1}"
+      STREAM_NAME: "my_stream_1"
   slave1:
     image: sa_slave
     build:
       context: slave
       dockerfile: Dockerfile
-    volumes:
-      - './slave:/app'
     networks:
       - network
+    volumes:
+      - './slave:/app'
     environment:
-      DB_HOST: db
-      DB_USER: root
-      DB_PASSWORD: root
-      DB_NAME: mydb
-      DB_PORT: 3306
-      GITHUB_API_KEY: "${GITHUB_API_KEY}"
-      REDIS_URL: "redis://redis:6379"
+      REDIS_URL: "${REDIS_URL}"
+      DB_HOST: "${DB_HOST}"
+      DB_USER: "${DB_USER}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      DB_NAME: "${DB_NAME}"
+      DB_PORT: "${DB_PORT}"
+      GITHUB_API_KEY: "${API_KEY_1}"
       TORS_LIST: "tor11,tor12,tor13"
+      STREAM_NAME: "my_stream_1"
+      GROUP_NAME: "my_group_1"
     depends_on:
-      - db
-      - redis
       - tor11
       - tor12
       - tor13
@@ -48,64 +48,27 @@ services:
     build:
       context: slave
       dockerfile: Dockerfile
-    volumes:
-      - './slave:/app'
     networks:
       - network
+    volumes:
+      - './slave:/app'
     environment:
-      DB_HOST: db
-      DB_USER: root
-      DB_PASSWORD: root
-      DB_NAME: mydb
-      DB_PORT: 3306
-      GITHUB_API_KEY: "${GITHUB_API_KEY}"
-      REDIS_URL: "redis://redis:6379"
+      REDIS_URL: "${REDIS_URL}"
+      DB_HOST: "${DB_HOST}"
+      DB_USER: "${DB_USER}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      DB_NAME: "${DB_NAME}"
+      DB_PORT: "${DB_PORT}"
+      GITHUB_API_KEY: "${API_KEY_2}"
       TORS_LIST: "tor21,tor22,tor23"
+      STREAM_NAME: "my_stream_1"
+      GROUP_NAME: "my_group_1"
     depends_on:
-      - db
-      - redis
       - tor21
       - tor22
       - tor23
-  slave3:
-    image: sa_slave
-    build:
-      context: slave
-      dockerfile: Dockerfile
-    volumes:
-      - './slave:/app'
-    networks:
-      - network
-    environment:
-      DB_HOST: db
-      DB_USER: root
-      DB_PASSWORD: root
-      DB_NAME: mydb
-      DB_PORT: 3306
-      GITHUB_API_KEY: "${GITHUB_API_KEY}"
-      REDIS_URL: "redis://redis:6379"
-      TORS_LIST: "tor31,tor32,tor33"
-    depends_on:
-      - db
-      - redis
-      - tor31
-      - tor32
-      - tor33
-  db:
-    image: mysql/mysql-server:8.0
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_ROOT_HOST: "%"
-      MYSQL_DATABASE: mydb
-      MYSQL_USER: root
-      MYSQL_PASSWORD: root
-    volumes:
-      - mysql:/var/lib/mysql
-    networks:
-      - network
+  
   tor11:
-    volumes:
-      - ./docker/tor:/etc/tor
     build:
       context: ./docker/tor
       dockerfile: Dockerfile
@@ -113,8 +76,6 @@ services:
       - network
 
   tor12:
-    volumes:
-      - ./docker/tor:/etc/tor
     build:
       context: ./docker/tor
       dockerfile: Dockerfile
@@ -122,70 +83,29 @@ services:
       - network
 
   tor13:
-    volumes:
-      - ./docker/tor:/etc/tor
     build:
       context: ./docker/tor
       dockerfile: Dockerfile
     networks:
       - network
   tor21:
-    volumes:
-      - ./docker/tor:/etc/tor
     build:
       context: ./docker/tor
       dockerfile: Dockerfile
     networks:
       - network
   tor22:
-    volumes:
-      - ./docker/tor:/etc/tor
     build:
       context: ./docker/tor
       dockerfile: Dockerfile
     networks:
       - network
   tor23:
-    volumes:
-      - ./docker/tor:/etc/tor
     build:
       context: ./docker/tor
       dockerfile: Dockerfile
     networks:
       - network
-  redis:
-    image: redis:alpine
-    networks:
-      - network
-
-  tor31:
-    volumes:
-      - ./docker/tor:/etc/tor
-    build:
-      context: ./docker/tor
-      dockerfile: Dockerfile
-    networks:
-      - network
-  tor32:
-    volumes:
-      - ./docker/tor:/etc/tor
-    build:
-      context: ./docker/tor
-      dockerfile: Dockerfile
-    networks:
-      - network
-  tor33:
-    volumes:
-      - ./docker/tor:/etc/tor
-    build:
-      context: ./docker/tor
-      dockerfile: Dockerfile
-    networks:
-      - network
-
-volumes:
-  mysql:
-    driver: local
 
 networks:
   network:

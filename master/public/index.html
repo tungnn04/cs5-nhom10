@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Redis Group Consume Tracking</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+      body {
+        font-family: sans-serif;
+      }
+      #chartContainer {
+        width: 80%;
+        margin: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="chartContainer">
+      <canvas id="groupChart"></canvas>
+    </div>
+
+    <script>
+      const MAX_POINTS = 30;
+      const POLLING_INTERVAL_MS = 5000;
+
+      let chart;
+
+      const groupDatasets = {};
+
+      const groupColors = {};
+      const baseColors = [
+        "rgb(255, 99, 132)",
+        "rgb(54, 162, 235)",
+        "rgb(255, 205, 86)",
+        "rgb(75, 192, 192)",
+        "rgb(153, 102, 255)",
+        "rgb(255, 159, 64)",
+        "rgb(201, 203, 207)",
+      ];
+      let nextColorIndex = 0;
+
+      function createChart() {
+        const ctx = document.getElementById("groupChart").getContext("2d");
+        chart = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels: [],
+            datasets: [],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            animation: false,
+            scales: {
+              y: {
+                beginAtZero: true,
+                title: {
+                  display: true,
+                  text: "Number of messages",
+                },
+              },
+              x: {
+                title: {
+                  display: true,
+                  text: "Time",
+                },
+              },
+            },
+            plugins: {
+              title: {
+                display: true,
+                text: "Dashboard: Redis Stream Group Consumption (Pending vs Done)",
+                font: {
+                  size: 16,
+                },
+              },
+              legend: {
+                position: "top",
+              },
+              tooltip: {
+                mode: "index",
+                intersect: false,
+              },
+            },
+
+            elements: {
+              line: {
+                tension: 0.1,
+              },
+              point: {
+                radius: 2,
+              },
+            },
+          },
+        });
+      }
+
+      function getGroupColor(groupName) {
+        if (!groupColors[groupName]) {
+          groupColors[groupName] =
+            baseColors[nextColorIndex % baseColors.length];
+          nextColorIndex++;
+        }
+        return groupColors[groupName];
+      }
+
+      function updateChart(groups) {
+        const now = new Date().toLocaleTimeString('vi-VI', {minute:"2-digit", second:"2-digit", hour:"2-digit"});
+
+        chart.data.labels.push(now);
+        if (chart.data.labels.length > MAX_POINTS) {
+          chart.data.labels.shift();
+        }
+
+        const activeDatasetLabels = new Set();
+
+        groups.forEach((group) => {
+          const groupName = group.name;
+          const pendingCount = group.pending;
+          const doneCount = group.done;
+          const groupColor = getGroupColor(groupName);
+
+          const pendingKey = `${groupName}_pending`;
+          const doneKey = `${groupName}_done`;
+
+          if (!groupDatasets[pendingKey]) {
+            const newPendingDataset = {
+              label: `${groupName} (Pending)`,
+              data: Array(chart.data.labels.length - 1).fill(null),
+              borderColor: groupColor,
+              backgroundColor: groupColor,
+              fill: false,
+              tension: 0.1,
+              borderWidth: 2,
+            };
+            groupDatasets[pendingKey] = newPendingDataset;
+            chart.data.datasets.push(newPendingDataset);
+          }
+          const pendingDataArray = groupDatasets[pendingKey].data;
+          pendingDataArray.push(pendingCount);
+          if (pendingDataArray.length > MAX_POINTS) {
+            pendingDataArray.shift();
+          }
+          activeDatasetLabels.add(groupDatasets[pendingKey].label);
+
+          if (!groupDatasets[doneKey]) {
+            const newDoneDataset = {
+              label: `${groupName} (Done)`,
+              data: Array(chart.data.labels.length - 1).fill(null),
+              borderColor: groupColor,
+              backgroundColor: groupColor,
+              fill: false,
+              borderDash: [5, 5],
+              tension: 0.1,
+              borderWidth: 2,
+            };
+            groupDatasets[doneKey] = newDoneDataset;
+            chart.data.datasets.push(newDoneDataset);
+          }
+          const doneDataArray = groupDatasets[doneKey].data;
+          doneDataArray.push(doneCount);
+          if (doneDataArray.length > MAX_POINTS) {
+            doneDataArray.shift();
+          }
+          activeDatasetLabels.add(groupDatasets[doneKey].label);
+        });
+
+        chart.data.datasets = chart.data.datasets.filter((dataset) => {
+          if (activeDatasetLabels.has(dataset.label)) {
+            while (dataset.data.length < chart.data.labels.length) {
+              dataset.data.unshift(null);
+            }
+            while (
+              dataset.data.length > MAX_POINTS &&
+              dataset.data.length > chart.data.labels.length
+            ) {
+              dataset.data.shift();
+            }
+            return true;
+          } else {
+            dataset.data.push(null);
+            if (dataset.data.length > MAX_POINTS) {
+              dataset.data.shift();
+            }
+
+            const isEmpty = dataset.data.every((point) => point === null);
+            if (isEmpty) {
+              const keyToRemove = Object.keys(groupDatasets).find(
+                (key) => groupDatasets[key] === dataset
+              );
+              if (keyToRemove) {
+                delete groupDatasets[keyToRemove];
+              }
+            }
+            return !isEmpty;
+          }
+        });
+
+        chart.update();
+      }
+
+      async function fetchAndUpdate() {
+        try {
+          const res = await fetch("/track");
+          if (!res.ok) {
+            throw new Error(`HTTP error! status: ${res.status}`);
+          }
+          const data = await res.json();
+
+          if (!data || !Array.isArray(data.groups)) {
+            console.error("Invalid data structure received:", data);
+
+            return;
+          }
+
+          const groups = data.groups.map((group) => {
+            const entriesRead = group["entries-read"]
+            const pending = group.pending
+            const name = group.name
+            const done = entriesRead - pending
+
+            return {
+              name: name,
+              pending: pending,
+              done: done,
+            };
+          });
+
+          updateChart(groups);
+        } catch (err) {
+          console.error("Error fetching or processing data:", err);
+        }
+      }
+
+      createChart();
+      fetchAndUpdate();
+      setInterval(fetchAndUpdate, POLLING_INTERVAL_MS);
+    </script>
+  </body>
+</html>
