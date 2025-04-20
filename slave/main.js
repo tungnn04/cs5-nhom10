@@ -7,7 +7,7 @@ const CONSUMER_NAME = process.env.HOSTNAME;
 
 const start = async () => {
     try {
-        const db = await mysql.createConnection({
+        const db = mysql.createPool({
             host: process.env.DB_HOST,
             user: process.env.DB_USER,
             password: process.env.DB_PASSWORD,
@@ -34,6 +34,43 @@ const start = async () => {
         const crawler = new Crawler(db)
         await crawler.init()
 
+        {
+            let isRunning = false;
+
+            setInterval(async () => {
+                try {
+                    if (isRunning) return
+                    const result = await client.xPendingRange(STREAM_NAME, GROUP_NAME, '-', '+', 1, { IDLE: 10 * 60 * 1000 });
+                    for (const entry of result) {
+                        const claimed = await client.xClaim(
+                            STREAM_NAME,
+                            GROUP_NAME,
+                            process.env.HOSTNAME,
+                            60000,
+                            [entry.id]
+                        );
+
+                        for (const msg of claimed) {
+                            console.log('Retrying message:', msg.message);
+                            try {
+                                isRunning = true;
+                                await crawler.fetchRepo(msg.message, () => client.xAck(STREAM_NAME, GROUP_NAME, msg.id));
+                            } catch (e) {
+                                console.error('Retry failed for message:', msg.id, e);
+                            } finally {
+                                isRunning = false;
+                            }
+                        }
+                    }
+
+                } catch (err) {
+                    console.error('Error checking pending messages:', err);
+                }
+            }, 5000);
+        }
+
+
+
         while (true) {
             const result = await client.xReadGroup(
                 GROUP_NAME,
@@ -43,7 +80,7 @@ const start = async () => {
                     id: '>',
                 },
                 {
-                    BLOCK: 0,
+                    BLOCK: 10000,
                     COUNT: 1,
                 }
             );
@@ -53,18 +90,20 @@ const start = async () => {
                     try {
                         const id = message.id;
                         const values = message.message;
-                        await crawler.fetchRepo(values)
-                        await client.xAck(STREAM_NAME, GROUP_NAME, id);
+                        console.log('New message:', values);
+                        await crawler.fetchRepo(values, () => client.xAck(STREAM_NAME, GROUP_NAME, id))
                     } catch (error) {
-                        
+
                     }
                 }
             } else {
-                console.log('No messages');
+                break;
             }
         }
+
     } catch (error) {
         console.error('Error:', error);
+        throw error
     }
 }
 
