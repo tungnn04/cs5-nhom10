@@ -147,6 +147,7 @@ class Crawler {
       `INSERT INTO repos (id, user, name) VALUES (?, ?, ?)`,
       [repo.id, repo.owner, repo.full_name]
     );
+    console.log(`Repo inserted: ${repo.full_name}`);
 
     for (const [id, content, repoID] of releases) {
       await this.DATABASE.query(
@@ -154,6 +155,7 @@ class Crawler {
         [id, content, repoID]
       );
     }
+    console.log(`${releases.length} releases inserted`);
 
     for (const [hash, message, releaseID] of commits) {
       await this.DATABASE.query(
@@ -161,6 +163,7 @@ class Crawler {
         [hash, message, releaseID]
       );
     }
+    console.log(`${commits.length} commits inserted`);
   }
 }
 

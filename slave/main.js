@@ -28,6 +28,7 @@ const start = async () => {
         let repos = await fetch(
           `https://api.github.com/search/repositories?q=stars:8000...${lastRepo.stargazers_count}&sort=stars&order=desc&per_page=100&page=${i}`,
           {
+            method: "GET",
             headers: {
               Authorization: `Bearer ${process.env.GITHUB_API_KEY}`,
             },
@@ -46,13 +47,17 @@ const start = async () => {
           const repoInfo = {
             full_name: repo.full_name,
             id: repo.id.toString(),
-            owner: repo.owner,
+            owner: repo.owner.login,
           };
+
+          const startTime = Date.now();
+
           try {
             await crawler.fetchRepo(repoInfo);
+            const elapsed = Date.now() - startTime;
             repoCount++;
             console.log(
-              `    Repo ${repoInfo.full_name} processed successfully. Total count: ${repoCount}`
+              `    Repo ${repoInfo.full_name} processed successfully in ${elapsed}ms. Total count: ${repoCount}`
             );
           } catch (error) {
             console.error(
@@ -61,13 +66,17 @@ const start = async () => {
             );
           }
         }
-        console.log("Repo count:", repoCount);
       }
       await new Promise((resolve) => setTimeout(resolve, 60 * 1000));
     }
   } catch (error) {
     console.error("Error:", error);
     throw error;
+  } finally {
+    if (db) {
+      await db.end();
+      console.log("Database connection closed.");
+    }
   }
 };
 
