@@ -19,7 +19,7 @@ const start = async () => {
       id: 148736243,
       stargazers_count: 26320,
     };
-    let repoCount = 1000;
+    let repoCount = 0;
 
     const TOTAL_REPOS = 5000;
 

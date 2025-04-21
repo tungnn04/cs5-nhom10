@@ -1,14 +1,10 @@
 const { getLastPage, sleep } = require("./utils");
 const Logger = require("./logger");
 const fetch = require("node-fetch");
-
-const API_KEY = "API_KEY";
-
 class Crawler {
   constructor(DATABASE) {
     this.DATABASE = DATABASE;
-    this.apikey = process.env.API_KEY;
-    this.option = API_KEY;
+    this.apikey = process.env.GITHUB_API_KEY;
   }
 
   async init() {
@@ -19,17 +15,13 @@ class Crawler {
     let attempt = 0;
 
     while (attempt <= retries) {
-      const tor = this.tors[this.currentTor];
-      this.currentTor = (this.currentTor + 1) % this.tors.length;
       try {
         const response = await fetch(url, {
           method: "GET",
           headers: {
             "User-Agent": "Mozilla/5.0",
-            Authorization:
-              this.option === API_KEY ? `Bearer ${this.apikey}` : undefined,
+            Authorization: `Bearer ${this.apikey}`,
           },
-          agent: this.option === TOR ? tor.agent : undefined,
           timeout: 20000,
         });
 
@@ -99,7 +91,7 @@ class Crawler {
     let releases = [];
     let commits = [];
     try {
-      const response = await this.fetchWithQueue(
+      const response = await this.fetchWithRetry(
         `https://api.github.com/repos/${repo.full_name}/releases?page=1&per_page=1`
       );
       const total = getLastPage(response.headers.get("link"));
@@ -108,7 +100,7 @@ class Crawler {
         releases = releases.concat(res.releases);
         commits = commits.concat(res.commits);
       }
-      this.saveRepo(repo, releases, commits)
+      await this.saveRepo(repo, releases, commits)
         .then(() => {
           console.log(
             `Repo: ${repo.full_name} - Releases: ${releases.length} - Commits: ${commits.length}`
@@ -132,7 +124,7 @@ class Crawler {
 
   async getCommitBetweenReleases(repo, from, to) {
     try {
-      const commits = await this.fetchWithQueue(
+      const commits = await this.fetchWithRetry(
         `https://api.github.com/repos/${repo.full_name}/compare/${from.tag_name}...${to.tag_name}`
       )
         .then((res) => res.json())
