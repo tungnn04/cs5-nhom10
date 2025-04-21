@@ -1,5 +1,0 @@
-SocksPort 0.0.0.0:9050
-ControlPort 0.0.0.0:9051
-CookieAuthentication 0
-HashedControlPassword 16:9A7A213E15B77F5A6030904A8B8DC7F2832BE1C31B33A1767024A85755
-Log notice stdout

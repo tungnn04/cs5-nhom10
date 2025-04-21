@@ -1,110 +1,74 @@
-const mysql = require('mysql2/promise')
-const redis = require('redis')
-const Crawler = require('./crawler')
-const STREAM_NAME = 'mystream';
-const GROUP_NAME = 'mygroup';
-const CONSUMER_NAME = process.env.HOSTNAME;
+const mysql = require("mysql2/promise");
+const Crawler = require("./crawler");
 
 const start = async () => {
-    try {
-        const db = mysql.createPool({
-            host: process.env.DB_HOST,
-            user: process.env.DB_USER,
-            password: process.env.DB_PASSWORD,
-            database: process.env.DB_NAME,
-            port: process.env.DB_PORT,
-            multipleStatements: true,
-        })
+  try {
+    const db = mysql.createPool({
+      host: process.env.DB_HOST,
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_NAME,
+      port: process.env.DB_PORT,
+      multipleStatements: true,
+    });
 
-        const client = redis.createClient({
-            url: process.env.REDIS_URL,
-        });
+    const crawler = new Crawler(db);
+    await crawler.init();
 
-        await client.connect();
+    let lastRepo = {
+      id: 148736243,
+      stargazers_count: 26320,
+    };
+    let repoCount = 1000;
 
-        await client.xGroupCreate(
-            STREAM_NAME,
-            GROUP_NAME,
-            '$',
-            {
-                MKSTREAM: true,
-            }
-        ).catch(() => { })
+    const TOTAL_REPOS = 5000;
 
-        const crawler = new Crawler(db)
-        await crawler.init()
-
-        {
-            let isRunning = false;
-
-            setInterval(async () => {
-                try {
-                    if (isRunning) return
-                    const result = await client.xPendingRange(STREAM_NAME, GROUP_NAME, '-', '+', 1, { IDLE: 10 * 60 * 1000 });
-                    for (const entry of result) {
-                        const claimed = await client.xClaim(
-                            STREAM_NAME,
-                            GROUP_NAME,
-                            process.env.HOSTNAME,
-                            60000,
-                            [entry.id]
-                        );
-
-                        for (const msg of claimed) {
-                            console.log('Retrying message:', msg.message);
-                            try {
-                                isRunning = true;
-                                await crawler.fetchRepo(msg.message, () => client.xAck(STREAM_NAME, GROUP_NAME, msg.id));
-                            } catch (e) {
-                                console.error('Retry failed for message:', msg.id, e);
-                            } finally {
-                                isRunning = false;
-                            }
-                        }
-                    }
-
-                } catch (err) {
-                    console.error('Error checking pending messages:', err);
-                }
-            }, 5000);
+    while (repoCount < TOTAL_REPOS) {
+      for (let i = 1; i <= 10 && repoCount < TOTAL_REPOS; i++) {
+        let repos = await fetch(
+          `https://api.github.com/search/repositories?q=stars:8000...${lastRepo.stargazers_count}&sort=stars&order=desc&per_page=100&page=${i}`,
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.GITHUB_API_KEY}`,
+            },
+          }
+        )
+          .then((res) => res.json())
+          .then((res) => res.items);
+        if (i === 1) {
+          const index = repos.findIndex((repo) => repo.id === lastRepo.id);
+          repos = repos.slice(index + 1);
+        } else if (i === 10) {
+          lastRepo = repos[repos.length - 1];
         }
-
-
-
-        while (true) {
-            const result = await client.xReadGroup(
-                GROUP_NAME,
-                CONSUMER_NAME,
-                {
-                    key: STREAM_NAME,
-                    id: '>',
-                },
-                {
-                    BLOCK: 10000,
-                    COUNT: 1,
-                }
+        repos = repos.slice(0, Math.min(repos.length, TOTAL_REPOS - repoCount));
+        for (const repo of repos) {
+          const repoInfo = {
+            full_name: repo.full_name,
+            id: repo.id.toString(),
+            owner: repo.owner,
+          };
+          try {
+            await crawler.fetchRepo(repoInfo);
+            repoCount++;
+            console.log(
+              `    Repo ${repoInfo.full_name} processed successfully. Total count: ${repoCount}`
             );
-
-            if (result) {
-                for (const message of result[0].messages) {
-                    try {
-                        const id = message.id;
-                        const values = message.message;
-                        console.log('New message:', values);
-                        await crawler.fetchRepo(values, () => client.xAck(STREAM_NAME, GROUP_NAME, id))
-                    } catch (error) {
-
-                    }
-                }
-            } else {
-                break;
-            }
+          } catch (error) {
+            console.error(
+              `    ERROR processing repo ${repoInfo.full_name} (ID: ${repoInfo.id}):`,
+              error
+            );
+          }
         }
-
-    } catch (error) {
-        console.error('Error:', error);
-        throw error
+        console.log("Repo count:", repoCount);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 60 * 1000));
     }
-}
+  } catch (error) {
+    console.error("Error:", error);
+    throw error;
+  }
+};
 
-start()
+start();
