@@ -16,8 +16,8 @@ const start = async () => {
     await crawler.init();
 
     let lastRepo = {
-      id: 148736243,
-      stargazers_count: 26320,
+      id: 28457823,
+      stargazers_count: 416889,
     };
     let repoCount = 0;
 
