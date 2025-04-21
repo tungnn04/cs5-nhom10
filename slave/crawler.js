@@ -12,9 +12,6 @@ class Crawler {
   }
 
   async init() {
-    const { default: PQueue } = await import("p-queue");
-    this.queue = new PQueue({ concurrency: 60 });
-    this.queue.start();
     await this.DATABASE.query("SELECT 1");
   }
 
@@ -76,13 +73,9 @@ class Crawler {
     }
   }
 
-  async fetchWithQueue(url) {
-    return this.queue.add(() => this.fetchWithRetry(url));
-  }
-
   async getReleases(repo, page) {
     try {
-      const releases = await this.fetchWithQueue(
+      const releases = await this.fetchWithRetry(
         `https://api.github.com/repos/${repo.full_name}/releases?page=${page}&per_page=100`
       ).then((res) => res.json());
       const commits = await Promise.all(
