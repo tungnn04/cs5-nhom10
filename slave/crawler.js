@@ -58,6 +58,7 @@ class Crawler {
           throw error;
 
         if (error.status === 403 || error.status === 429) {
+          throw error;
         } else if (errorCode === "EAI_AGAIN" || errorCode === "ENOTFOUND") {
           delay = Math.max(delay, 5000);
         } else if (
