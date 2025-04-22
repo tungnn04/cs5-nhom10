@@ -1,24 +1,16 @@
 const { getLastPage, sleep } = require('./utils')
 const fetch = require('node-fetch')
-const TorController = require('./tor')
-
-const API_KEY = 'API_KEY'
-const TOR = 'TOR'
 
 class Crawler {
     constructor(DATABASE) {
         this.DATABASE = DATABASE
         this.apikey = process.env.GITHUB_API_KEY
-        this.tors = process.env.TORS_LIST.split(',').map(tor => new TorController(tor))
-        this.currentTor = 0
-        this.option = API_KEY
     }
 
     async init() {
         const { default: PQueue } = await import("p-queue")
         this.queue = new PQueue({ concurrency: 60 })
         this.queue.start()
-        await Promise.all(this.tors.map(tor => tor.connect()))
         await this.DATABASE.query('SELECT 1')
     }
 
@@ -26,16 +18,13 @@ class Crawler {
         let attempt = 0;
 
         while (attempt <= retries) {
-            const tor = this.tors[this.currentTor];
-            this.currentTor = (this.currentTor + 1) % this.tors.length;
             try {
                 const response = await fetch(url, {
                     method: 'GET',
                     headers: {
                         'User-Agent': 'Mozilla/5.0',
-                        'Authorization': this.option === API_KEY ? `Bearer ${this.apikey}` : undefined,
+                        'Authorization': `Bearer ${this.apikey}`
                     },
-                    agent: this.option === TOR ? tor.agent : undefined,
                     timeout: 20000,
                 });
 
@@ -55,8 +44,6 @@ class Crawler {
                 if (error.status === 404 || error.status === 422 || attempt === retries) throw error;
 
                 if (error.status === 403 || error.status === 429) {
-                    if (this.option === API_KEY) this.option = TOR;
-                    else await tor.rotateIP();
                 } else if (errorCode === 'EAI_AGAIN' || errorCode === 'ENOTFOUND') {
                     delay = Math.max(delay, 5000);
                 } else if (errorCode === 'ETIMEDOUT' || errorCode === 'ESOCKETTIMEDOUT' || errorCode === 'ECONNRESET' || errorCode === 'ECONNREFUSED') {
@@ -69,13 +56,9 @@ class Crawler {
         }
     }
 
-    async fetchWithQueue(url) {
-        return this.queue.add(() => this.fetchWithRetry(url))
-    }
-
     async getReleases(repo, page) {
         try {
-            const releases = await this.fetchWithQueue(`https://api.github.com/repos/${repo.full_name}/releases?page=${page}&per_page=100`).then(res => res.json())
+            const releases = await this.fetchWithRetry(`https://api.github.com/repos/${repo.full_name}/releases?page=${page}&per_page=100`).then(res => res.json())
             const commits = await Promise.all(releases.slice(1).map((e, i) => this.getCommitBetweenReleases(repo, e, releases[i])))
             return {
                 commits: commits.flat(),
@@ -94,7 +77,7 @@ class Crawler {
         let releases = []
         let commits = []
         try {
-            const response = await this.fetchWithQueue(`https://api.github.com/repos/${repo.full_name}/releases?page=1&per_page=1`)
+            const response = await this.fetchWithRetry(`https://api.github.com/repos/${repo.full_name}/releases?page=1&per_page=1`)
             const total = getLastPage(response.headers.get('link'))
             for (let i = 1; i <= Math.min(Math.ceil(total / 100), 10); i++) {
                 const res = await this.getReleases(repo, i)
@@ -114,7 +97,7 @@ class Crawler {
 
     async getCommitBetweenReleases(repo, from, to) {
         try {
-            const commits = await this.fetchWithQueue(`https://api.github.com/repos/${repo.full_name}/compare/${from.tag_name}...${to.tag_name}`).then(res => res.json()).then(res => res.commits)
+            const commits = await this.fetchWithRetry(`https://api.github.com/repos/${repo.full_name}/compare/${from.tag_name}...${to.tag_name}`).then(res => res.json()).then(res => res.commits)
             return commits.map(commit => [commit.sha, commit.commit.message || "None", from.id])
         } catch (error) {
             if (error.status === 404 || error.status === 422) {

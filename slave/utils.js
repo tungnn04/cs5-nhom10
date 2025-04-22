@@ -7,31 +7,10 @@ function getLastPage(linkHeader) {
 }
 
 
-function debounce(fn, delay) {
-    let sharedPromise = null;
-    let timeoutId = null;
-
-    return (...args) => {
-        if(sharedPromise) {
-            return sharedPromise;
-        }
-        sharedPromise = fn(...args);
-        timeoutId = setTimeout(() => {
-            sharedPromise = null;
-            timeoutId = null;
-        }, delay);
-        return sharedPromise;
-    };
-}
-
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 
 
-
-
-
-
-module.exports = { getLastPage, debounce, sleep}
+module.exports = { getLastPage, sleep}
