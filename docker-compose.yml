@@ -33,7 +33,7 @@ services:
       DB_HOST: "${DB_HOST}"
       DB_USER: "${DB_USER}"
       DB_PASSWORD: "${DB_PASSWORD}"
-      DB_NAME: "${DB_NAME}"
+      DB_NAME: "mydb1"
       DB_PORT: "${DB_PORT}"
       GITHUB_API_KEY: "${API_KEY_1}"
       TORS_LIST: "tor11,tor12,tor13"
@@ -57,7 +57,7 @@ services:
       DB_HOST: "${DB_HOST}"
       DB_USER: "${DB_USER}"
       DB_PASSWORD: "${DB_PASSWORD}"
-      DB_NAME: "${DB_NAME}"
+      DB_NAME: "mydb1"
       DB_PORT: "${DB_PORT}"
       GITHUB_API_KEY: "${API_KEY_2}"
       TORS_LIST: "tor21,tor22,tor23"
@@ -67,7 +67,20 @@ services:
       - tor21
       - tor22
       - tor23
-  
+  simple-slave:
+    image: sa_simple_slave
+    networks:
+      - network
+    environment:
+      REDIS_URL: "${REDIS_URL}"
+      DB_HOST: "${DB_HOST}"
+      DB_USER: "${DB_USER}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      DB_NAME: "mydb2"
+      DB_PORT: "${DB_PORT}"
+      GITHUB_API_KEY: "${API_KEY_6}"
+      STREAM_NAME: "my_stream_1"
+      GROUP_NAME: "my_group_2"
   tor11:
     build:
       context: ./docker/tor

@@ -32,39 +32,6 @@ const start = async () => {
 
     await db.query('SELECT 1')
 
-    // await db.query(`
-    //     DROP TABLE IF EXISTS commits;
-
-    //     DROP TABLE IF EXISTS releases;
-
-    //     DROP TABLE IF EXISTS repos;
-
-    //     CREATE TABLE IF NOT EXISTS releases (
-    //         id int NOT NULL UNIQUE,
-    //         content longtext NOT NULL,
-    //         repoID int NOT NULL,
-    //         PRIMARY KEY (id)
-    //     );
-
-    //     CREATE TABLE IF NOT EXISTS repos (
-    //         id int NOT NULL UNIQUE,
-    //         user text NOT NULL,
-    //         name text NOT NULL,
-    //         PRIMARY KEY (id)
-    //     );
-
-    //     CREATE TABLE IF NOT EXISTS commits (
-    //         hash text NOT NULL,
-    //         message text NOT NULL,
-    //         releaseID int NOT NULL
-    //     );
-
-
-    //     ALTER TABLE releases ADD CONSTRAINT repo_fk0 FOREIGN KEY (repoID) REFERENCES repos(id);
-
-    //     ALTER TABLE commits ADD CONSTRAINT commit_fk2 FOREIGN KEY (releaseID) REFERENCES releases(id);
-    // `)
-
     const client = redis.createClient({
         url: process.env.REDIS_URL,
     });
@@ -78,7 +45,7 @@ const start = async () => {
     app.use(express.static(path.join(__dirname, 'public')));
 
     app.get('/track', async (req, res) => {
-        const rawGroups = await client.sendCommand(['XINFO', 'GROUPS', 'my_stream_1']);
+        const rawGroups = await client.sendCommand(['XINFO', 'GROUPS', STREAM_NAME]);
         const groups = parseXInfoGroupsResponse(rawGroups);
         return res.json({
             groups: groups,
